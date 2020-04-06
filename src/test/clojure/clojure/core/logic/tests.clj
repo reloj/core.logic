@@ -3572,3 +3572,265 @@
   (let [result (u/prep '([?x] . ?foo))
         [head] (lfirst result)]
     (is (lvar? head))) )
+
+;; =============================================================================
+;; CLP(Set)
+
+;;; feature complete wrt to paper!
+
+(deftest clpset-run-eq-1
+  (is (=
+       (run* [q] (== q #{q 1}))
+       '((#{_0 1} :- (set _0))))))
+
+(deftest clpset-run-eq-2
+  (is (=
+       (run* [q] (== q #{q 1}) (== q #{q 2}))
+       ;; TODO: why 5 times, in {log}, it's only 4
+       '((#{_0 1 2} :- (set _0))
+         (#{_0 1 2} :- (set _0))
+         (#{_0 1 2} :- (set _0))
+         (#{_0 1 2} :- (set _0))
+         (#{_0 1 2} :- (set _0))))))
+
+(deftest clpset-run-eq-3
+  (is (=
+       (run* [q] (fresh (x y r s) (== q `(,x ,y ,r ,s)) (== #{r x} #{s y})))
+       '(((_0 _0 _1 _1) :- (set _1))
+         ((_0 _0 _1 #{_1 _0}) :- (set _1))
+         ((_0 _0 #{_1 _0} _1) :- (set _1))
+         ((_0 _1 #{_2 _1} #{_2 _0}) :- (set _2))))))
+
+(deftest clpset-run-eq-4
+  (is (=
+       (run* [q] (fresh (z) (== q #{q #{z 1}})))
+       '((#{_0 #{_1 1}} :- (set _0 _1))))))
+
+(deftest clpset-run-eq-5
+  (is (=
+       (run* [q] (== #{q 2} #{q 1}))
+       '((#{_0 1 2} :- (set _0))))))
+
+(deftest clpset-run-ino-1
+  (is (=
+       (run* [q] (fresh (x y z) (== q `(,x ,y ,z)) (ino 'a #{z x 'b y})))
+       '(((a _0 _1) :- (set _1))
+         ((_0 a _1) :- (set _1))
+         ((_0 _1 #{_2 a}) :- (set _2))))))
+
+(deftest clpset-run-neq-1
+  (is (=
+       (run* [q] (fresh (x y)
+                   (== q `(,x ,y))
+                   (=/= `(f a ,#{#{} 'b 'c}) `(f ,x ,#{#{} x y}))))
+       '(((_0 _1) :- (=/= (_0 a)))
+         ((_0 _1) :- (=/= (_0 b) (_1 b)))
+         ((_0 _1) :- (=/= (_0 b) (_0 c)))
+         ((_0 _1) :- (=/= (_0 c) (_1 c)))
+         ((_0 _1) :- (=/= (_1 b) (_1 c)))))))
+
+(deftest clpset-run-neq-2
+  (is (=
+       (run* [q] (=/= #{q 'c} #{#{} 'b 'c}))
+       '((_0 :- (set _0) (!in (b _0)))
+         (#{_0 _1} :- (set _0) (=/= (_1 b) (_1 c)))))))
+
+(deftest clpset-run-union-1
+  (is (=
+       (run* [q] (fresh (x y z v)
+                   (== q `(,x ,y ,z ,v))
+                   (uniono #{#{} x} #{z y} v)))
+       '(((_0 _1 _2 #{_2 _0 _1}) :-
+          (set _2)
+          (=/= (_1 _0))
+          (!in (_0 _2)))
+         ((_0 _0 _1 #{_1 _0}) :-
+          (set _1)
+          (!in (_0 _1)))
+         ((_0 _0 #{_1 _0} #{_1 _0}) :-
+          (set _1)
+          (!in (_0 _1)))
+         ((_0 _1 #{_2 _0} #{_2 _0 _1}) :-
+          (set _2)
+          (=/= (_1 _0))
+          (!in (_0 _2)))))))
+
+(deftest clpset-run-union-cats-and-dogs-1
+  (is (=
+       (length
+        (run* [q]
+          (fresh (x y z v)
+            (== q `(,x ,y ,z ,v))
+            (uniono #{#{} 'cat x y} #{#{} 'dog 'bird z} v))))
+       57)))
+
+(deftest clpset-run-disj-1
+  (is (=
+       (run* [q]
+         (fresh (x y z)
+           (== q `(,x ,y ,z))
+           (disjo #{#{} x y} #{z 'a})))
+       '(((_0 _1 _2) :-
+          (set _2)
+          (=/= (_0 a) (_1 a))
+          (!in (_0 _2) (_1 _2)))))))
+
+(deftest clpset-run-not-union-1
+  (is (=
+       (run* [q]
+         (fresh (x y)
+           (== q `(,x ,y))
+           (!uniono x y #{#{} 'a 'b})))
+       '(((_0 _1) :- (set _0 _1) (!in (a _0) (a _1)))
+         ((_0 _1) :- (set _0 _1) (!in (b _0) (b _1)))
+         ((#{_0 _1} _2) :- (set _0 _2) (=/= (_1 a) (_1 b)))
+         ((_0 #{_1 _2}) :- (set _0 _1) (=/= (_2 a) (_2 b)))))))
+
+(deftest clpset-run-not-disj-1
+  (is (=
+       (run* [q] (!disjo #{#{} 'a} #{#{} q 'b}))
+       '(a))))
+
+(deftest clpset-run-union-neq-1
+  (is (=
+       (run* [q]
+         (fresh (x y z)
+           (== q `(,x ,y ,z))
+           (uniono x y z)
+           (=/= z #{})))
+       '(((#{_0 _1} _2 #{_3 _1}) :-
+          (set _0 _2 _3)
+          (!in (_1 _0) (_1 _3))
+          (union [_0 _2 _3]))
+         ((_0 #{_1 _2} #{_3 _2}) :-
+          (set _0 _1 _3)
+          (!in (_2 _1) (_2 _3))
+          (union [_0 _1 _3]))
+         ((#{_0 _1} #{_2 _1} #{_3 _1}) :-
+          (set _0 _2 _3)
+          (!in (_1 _0) (_1 _2) (_1 _3))
+          (union [_0 _2 _3]))
+         ((#{_0 _1} _2 #{_3 _1}) :-
+          (set _0 _2 _3)
+          (!in (_1 _0) (_1 _3))
+          (union [_0 _2 _3]))
+         ((_0 #{_1 _2} #{_3 _2}) :-
+          (set _0 _1 _3)
+          (!in (_2 _1) (_2 _3))
+          (union [_0 _1 _3]))
+         ((#{_0 _1} #{_2 _1} #{_3 _1}) :-
+          (set _0 _2 _3)
+          (!in (_1 _0) (_1 _2) (_1 _3))
+          (union [_0 _2 _3]))))))
+
+(deftest clpset-intersectiono-related
+  (is (=
+       (run* [q]
+         (fresh (x y z)
+           (uniono x z #{#{} 1})
+           (uniono y z #{#{} 1})
+           (disjo x y)
+           (== q `(,x ,y ,z))))
+       '((#{} #{} #{#{} 1})
+         (#{#{} 1} #{} #{#{} 1})
+         (#{} #{#{} 1} #{#{} 1})))))
+
+;;; problematic (?) tests, reproduced in {log} too
+
+(deftest clpset-redundant-answers-=/=-pair-case-1
+  (is (=
+       (run* [q]
+         (fresh (va vb r l v)
+           (== q #{#{} `(a ,va) `(b ,vb)})
+           (== q #{r `(,l ,v)})
+           (!ino `(,l ,v) r)))
+       '(#{#{} (a _0) (b _1)}
+         (#{#{} (a _0) (b _1)} :- (=/= (_1 _0))) ;; subsumed
+         #{#{} (a _0) (b _1)} ;; redundant
+         (#{#{} (a _0) (b _1)} :- (=/= (_0 _1))) ;; subsumed
+         ))))
+
+;;; useful features beyond the paper
+
+;;; symbolo
+
+(deftest clpset-run-symbolo-0
+  (is (=
+       (run* [q] (symbolo q))
+       '((_0 :- (sym _0))))))
+
+(deftest clpset-run-symbolo-1
+  (is (=
+       (run* [q]
+         (symbolo q)
+         (== q 'hello))
+       '(hello))))
+
+(deftest clpset-run-symbolo-2
+  (is (=
+       (run* [q]
+         (symbolo q)
+         (== q #{}))
+       '())))
+
+(deftest clpset-run-symbolo-3
+  (is (=
+       (run* [q]
+         (symbolo q)
+         (== q #{q 'x}))
+       '())))
+
+(deftest clpset-run-symbolo-3
+  (is (=
+       (run* [q]
+         (symbolo q)
+         (seto q))
+       '())))
+
+;;; implementation tests
+
+(deftest clpset-normalize-set-1
+  (is (=
+       (normalize-set #{} '() empty-s)
+       #{})))
+
+(deftest clpset-normalize-set-2
+  (is (=
+       (normalize-set #{#{} 1 2} '() empty-s)
+       #{#{} 1 2})))
+
+(deftest clpset-normalize-set-3
+  (is (=
+       (normalize-set #{#{#{} 1} 2} '() empty-s)
+       #{#{} 1 2})))
+
+(deftest clpset-normalize-set-4
+  (is (=
+       (normalize-set #{#{(var 'x) 1} 2} '() empty-s)
+       #{(var 'x) 1 2})))
+
+(deftest clpset-subseto-1
+  (is (=
+       (run 1 [q]
+         (subseto #{#{} 1 2} #{#{} 1 2 3}))
+       '(_0))))
+
+;;; Lib tests
+
+(deftest clpset-subseto-1-not
+  (is (=
+       (run 1 [q]
+         (subseto #{#{} 1 2 3} #{#{} 1 2}))
+       '())))
+
+(deftest clpset-not-subseto-1
+  (is (=
+       (run 1 [q]
+         (!subseto #{#{} 1 2 3} #{#{} 1 2}))
+       '(_0))))
+
+(deftest clpset-not-subseto-1-not
+  (is (=
+       (run 1 [q]
+         (!subseto #{#{} 1 2} #{#{} 1 2 3}))
+       '())))
