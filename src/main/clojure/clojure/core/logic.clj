@@ -886,9 +886,138 @@
       (instance? ITreeTerm x)))
 
 ;; =============================================================================
+;; Constraint store mgmt translation
+(define s->S (lambda (s) (car s)))
+(define s->C (lambda (s) (cadr s)))
+(define C->set (lambda (C) (car C)))
+(define C->=/= (lambda (C) (cadr C)))
+(define C->!in (lambda (C) (caddr C)))
+(define C->union (lambda (C) (cadddr C)))
+(define C->disj (lambda (C) (cadddr (cdr C))))
+(define C->symbol (lambda (C) (cadddr (cddr C))))
+(define S->s (lambda (S) (with-S empty-s S)))
+(define with-S (lambda (s S) (list S (s->C s))))
+(define with-C (lambda (s C) (list (s->S s) C)))
+(define with-C-set (lambda (C cs) (list cs (C->=/= C) (C->!in C) (C->union C) (C->disj C) (C->symbol C))))
+(define with-C-=/= (lambda (C cs) (list (C->set C) cs (C->!in C) (C->union C) (C->disj C) (C->symbol C))))
+(define with-C-!in (lambda (C cs) (list (C->set C) (C->=/= C) cs (C->union C) (C->disj C) (C->symbol C))))
+(define with-C-union (lambda (C cs) (list (C->set C) (C->=/= C) (C->!in C) cs (C->disj C) (C->symbol C))))
+(define with-C-disj (lambda (C cs) (list (C->set C) (C->=/= C) (C->!in C) (C->union C) cs (C->symbol C))))
+(define with-C-symbol (lambda (C cs) (list (C->set C) (C->=/= C) (C->!in C) (C->union C) (C->disj C) cs)))
+(define empty-s '(() (() () () () () ())))
+
+;; =============================================================================
+;; Set terms
+
+"Design consideration:
+looking into Nada Amin's work, her initial set term representation was a plain scheme vector.
+She later changed it to a vector of the set term base (structure? improper tail?), and its members, documenting that 'it seemed clumsy to store 
+the elements of a set in a vector when they were mostly used in a list fashion anyways. The main benefit is getting rid 
+of things like vector->list'. I'm not fluent in scheme but reading both Nada Amin's work and David Nolen's implementation,
+I think it can make sense to change representation yet again to lcons/llist, that are already implemented in core.logic.
+Admitedly this is a gut feeling, but I have limited time to fall into 'analysis paralysis'."
+
+(comment ; TODO
+  "TODO in any case internal CLP representation of sets is not that of clojure, so need to check if it works everywhere
+it should, as sets are seqs:"
+  (lcons (lvar) #{1 2}) "=> (<lvar:5433> 1 2)")
+
+(defn llist-tail [l]
+  (loop [l l]
+    (cond
+      (lcons? l) (recur (lnext l))
+      (seq? l) (recur (next l))
+      :else l)))
+
+(comment
+  (llist-tail (lvar)) "=> <lvar:5401>"
+  (llist-tail (llist 1 2 3 4 (lvar))) "=> <lvar:5406>"
+  (llist-tail (llist 1 2 3 4 5)) "=> 5"
+  (llist-tail (llist 1 2 3 4 (cons 5 nil))) "=> nil"
+)
+
+(def set-term llist)
+(def set-term? lcons?)
+(def scons lcons)
+(def set-term-tail llist-tail)
+(defmacro make-set [base mems] `(llist ~@mems ~base))
+(def set-base set-term-tail)
+(defn set-mems [set]
+  (cond
+    (lvar? set) '()
+    (lcons? set) (cons (lfirst set) (set-mems (lnext set)))
+    (coll? set) (seq set)
+    :else (seq (list set))))
+
+(defn normalize-set [x es s]
+  (cond
+    (or (= '() x) (set? x))
+    (if (nil? es) x (make-set x es))
+    (set-term? x)
+    (recur (walk (set-base x) s)
+           (append (set-mems x) es)
+           s)
+    (and (lvar? x) (not (nil? es))) (make-set x es)
+    (and (symbol? x) (not (nil? es))) (make-set x es)))
+
+
+;; =============================================================================
 ;; Unification
 
-;; TODO : a lot of cascading ifs need to be converted to cond
+(declare seto)
+
+(defn unify-with-set* [u v s]
+  (when (set? v) ; u is a set by unify-terms definition and v can't be an lvar by unify definition
+    ; TODO consider if I want to unify maps and sets
+    (if (empty? v)
+      (== u v)
+      (let [vns (normalize-set v '() s)
+            x (set-tail vns)]
+        (cond
+          (and (lvar? u) (eq? x u)
+               (not (occurs-check u (set-mems vns) s)))
+          (bind s ; check bind is as usual
+                (fresh [n]
+                  (== u (with-set-tail n vns))
+                  (seto n)))
+          (not-empty u)
+          (let [uns (normalize-set u '() s)]
+            (if (not (eq? (set-tail uns) (set-tail vns)))
+              (let [tu (non-empty-set-first uns)
+                    ru (non-empty-set-rest uns)
+                    tv (non-empty-set-first vns)
+                    rv (non-empty-set-rest vns)]
+                (bind s
+                      (conde
+                       [(== tu tv) (== ru rv) (seto ru)]
+                       [(== tu tv) (== uns rv)]
+                       [(== tu tv) (== ru vns)]
+                       [(fresh [n]
+                          (== ru (set n tv)) ; does set work ok here?
+                          (== (set n tu) rv)
+                          (seto n))])))
+              ((let [t0 (non-empty-set-first uns) ; what is this double parens???
+                     ru (non-empty-set-rest uns)]
+                 (bind s
+                       (let [b (set-base vns)]
+                         (let loopj ((j (set-mems vns)) ; what with this let with name ??
+                                     (acc '()))
+                              (if (nil? j)
+                                fail
+                                (let [cj (cdr j)] ; why 2 lets, is it because not let* ?
+                                  (let [tj (car j)
+                                        rj (if (and (null? acc) (null? cj))
+                                             b
+                                             (make-set b (append acc cj)))]
+                                    (conde
+                                     [(== t0 tj) (== ru rj) (seto ru)]
+                                     [(== t0 tj) (== uns rj)]
+                                     [(== t0 tj) (== ru vns)]
+                                     [(fresh [n]
+                                        (== x (set n t0))
+                                        (== (with-set-tail n ru) (with-set-tail n vns))
+                                        (seto n))]
+                                     [(loopj cj (cons tj acc))])))))))))))))))) ; what is this recursion
 
 (defn unify-with-sequential* [u v s]
   (cond
@@ -930,6 +1059,10 @@
     (if (= u v)
       s
       nil))
+
+  clojure.lang.IPersistentSet
+  (unify-terms [u v s]
+    (unify-with-set* u v s))
 
   clojure.lang.Sequential
   (unify-terms [u v s]
@@ -2893,3 +3026,25 @@
         :else fail))
     (fn [_ v _ r a]
       `(seqc ~(-reify a v r)))))
+
+(comment
+;; =============================================================================
+;; CLP(Set)
+
+;;; mk
+
+
+
+;;; Lib
+
+(defn subseto
+  (lambda [r1 r2]
+    (fresh [ri]
+      (uniono r1 ri r2))))
+
+(defn !subseto
+  (lambda [r1 r2]
+    (fresh [x]
+      (ino x r1)
+      (!ino x r2))))
+)
