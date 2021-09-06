@@ -3582,11 +3582,11 @@
 ;; CLP(Set)
 
 ;;; feature complete wrt to paper!
-
+(comment
 (deftest clpset-run-eq-1
   (is (=
        (run* [q] (== q #{q 1}))
-       '((#{_0 1} :- (set _0))))))
+       '((#{_0 1} :- (set? _0)))))) ; I like this pred-like syntax for constraints
 
 (deftest clpset-run-eq-2
   (is (=
@@ -3839,3 +3839,4 @@
        (run 1 [q]
          (!subseto #{#{} 1 2} #{#{} 1 2 3}))
        '())))
+)
