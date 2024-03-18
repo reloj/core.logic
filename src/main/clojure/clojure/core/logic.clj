@@ -1006,6 +1006,15 @@
           (persistent! r)))
       (meta v)))
 
+  clojure.lang.IPersistentSet
+  (walk-term [v f]
+    (with-meta
+      (loop [v (seq v) r (transient [])]
+        (if (seq v)
+          (recur (next v) (conj! r (walk-term (f (first v)) f)))
+          (set (persistent! r))))
+      (meta v)))
+
   clojure.lang.IPersistentMap
   (walk-term [v f]
     (if (record? v)

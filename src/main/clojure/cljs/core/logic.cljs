@@ -553,6 +553,13 @@
         (recur (-next v) (-conj! r (-walk* s (first v))))
         (persistent! r))))
 
+  PersistentSet
+  (-walk-term [^not-native v ^not-native s]
+    (loop [^not-native v (-seq v) ^not-native r (transient [])]
+      (if-not (nil? v)
+        (recur (-next v) (-conj! r (-walk* s (first v))))
+        (set (persistent! r)))))
+
   PersistentHashMap
   (-walk-term [v s] (walk-term-map* v s)))
 
