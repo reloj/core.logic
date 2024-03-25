@@ -2640,8 +2640,11 @@
   Note, the constraint will not run until all arguments are fully ground.
 
   Use defnc to define a constraint and assign a toplevel var."
-  [args & body]
-  (let [name (symbol (gensym "fnc"))]
+  [& sigs]
+  (let [fnname (if (symbol? (first sigs)) (first sigs) nil)
+        args (if fnname (first (rest sigs)) (first sigs))
+        body (if fnname (rest  (rest sigs)) (rest sigs))
+        name (symbol (gensym (if fnname (str "fnc:" fnname "_") "fnc_")))]
     `(fn ~args
        (letfn [(~name [~@args]
                  (reify
