@@ -889,14 +889,177 @@
   ([f s] `(lcons ~f ~s))
   ([f s & rest] `(lcons ~f (llist ~s ~@rest))))
 
+(defn llist-tail [l]
+  "Returns the tail"
+  (loop [l l]
+    (cond
+      (lvar? l) l
+      (lcons? l) (recur (lnext l))
+      (seq? l) (recur (next l)))))
+
+(comment
+  (llist-tail (lvar)) "=> <lvar:5401>"
+  (llist-tail (llist 1 2 3 4 (lvar))) "=> <lvar:5406>"
+  (llist-tail (llist 1 (lvar) 3 4 5)) "=> nil"
+  (llist-tail (llist 1 2 3 4 (cons 5 nil))) "=> nil"
+  (llist-tail (llist 1 2 3 4 (lcons 5 nil))) "=> nil"
+  )
+
 (defn tree-term? [x]
   (or (coll? x)
       (instance? ITreeTerm x)))
 
 ;; =============================================================================
-;; Unification
+;; LSet
 
-;; TODO : a lot of cascading ifs need to be converted to cond
+(declare unify-with-set* lset lset?) ; to do order a little bit
+
+(deftype LSet [base mems ^{:unsynchronized-mutable true :tag int} cache]
+
+  ;; TO DO look into LCons for other interfaces to implement:
+  ;; LConsSeq and LConsPrint??
+
+  clojure.lang.ILookup
+  (valAt [this k]
+    (.valAt this k nil))
+  (valAt [this k not-found]
+    (case k
+      :base base
+      :mems mems
+      not-found))
+
+  Object
+  (toString [this] (as-> (vec mems) %
+                     (if-not (= base #{}) (conj % "." base) %)
+                     (interpose " " %)
+                     (apply str %)
+                     (str "LSet#{" % "}")))
+  (equals [this o]
+    (or (identical? this o)
+        (and (.. this getClass (isInstance o))
+             (cond
+               (nil? this) (nil? o)
+               (lvar? this) true
+               (lvar? o) true
+               (and (lset? this) (lset? o))
+               (let [meb (.base this)
+                     mem (.mems this)
+                     youb (.base o)
+                     youm (.mems o)]
+                 (and (or (= meb youb)
+                          (lvar? meb)
+                          (lvar? youb))
+                      (= (set mem) (set youm))))
+               :else (= this o)))))
+
+  (hashCode [this]
+    (if (clojure.core/== cache -1)
+      (do
+        (set! cache (uai (umi (int 31) (clojure.lang.Util/hash base))
+                         (clojure.lang.Util/hash mems)))
+        cache)
+      cache))
+
+  IUnifyTerms ; the protocols file says that this is for core Clojure types, and the next 4 interfaces for terms in general
+  (unify-terms [u v s]
+    (cond
+      (or (set? v) (lset? v))
+      (unify-with-set* u v s)
+      (map? v)
+      nil                             ; hey, what about maps?
+      :else nil))
+
+  IReifyTerm
+  (reify-term [v s]
+    (reify-term (into (:mems v) (:base v)) s))
+
+  IWalkTerm
+  (walk-term [v f]
+    (walk-term (into (:mems v) (:base v)) f))
+
+  IOccursCheckTerm
+  (occurs-check-term [v x s]
+    (occurs-check-term (into (:mems v) (:base v)) x s))
+
+  IBuildTerm
+  (build-term [u s]
+    (build-term (into (:mems u) (:base u)) s)))
+
+(defmethod print-method LSet [x ^Writer writer]
+  (.write writer (.toString x)))
+
+(defmethod print-method Substitutions [x ^Writer writer]
+  (.write writer (str "Substitution#" (.toString x))))
+
+(defn lset
+  "Constructs a set that can hold logical variables, which can in turn substitute for
+   sets with logical variables, etc."
+  ([] (LSet. #{} #{} -1))
+  ([mems] (LSet. #{} mems -1))
+  ([base mems] (LSet. base mems -1)))
+
+(defn lset? [x]
+  (instance? LSet x))
+
+(defn lset-to-llist [ls]
+  (println "DEBUG: Not sure I should be doing this...")
+  (lcons (:base ls)
+         (:mems ls)))
+
+(defn llist-to-lset [ll]
+  (println "DEBUG: Not sure I should be doing this...")
+  (lset (lfirst ll)
+        (lnext ll)))
+
+(def empty-lset (lset))
+(defn lset-empty? [lset] (and (lset? lset)
+                              (not (lvar? (.base lset)))
+                              (empty? (.base lset))
+                              (empty? (.mems lset))))
+
+(defn lset-normalize [x es s]
+  "(I think this function takes either a set or an lset, ¿es might be possible extra members? and a substitution,
+   and minimizes the improper part of the set with logical members."
+  "Note that in namin, the first element of the set was the tail, a la cons, but in clojure that structure does not
+   make sense with a proper set as input. this might affect code as meaning of #{#{2} 1} changes."
+  (cond ; TODO consider if I want to unify maps and sets, here I'm dropping it as a condition
+    (set? x)
+    (lset (into x es))
+    (lset-empty? x)
+    (if (empty? es) x (lset es)) ; es cant be an lset or this fails. I think empty? should work for LSet...
+    (lset? x)
+    (recur (walk s (:base x))
+           (into (:mems x) es)
+           s)
+    (lvar? x)
+    (if (empty? es) x (lset x es))
+    (and (symbol? x) (not (empty? es))) (lset x es)))
+
+(defn lset-tail [x]                     ; no claro que esté bien
+  (cond
+    (lvar? x) x
+    (lset? x) (:base x)
+    (lset-empty? x) :breaking-value-to-check ; redundant. always???? base is now #{}
+    ))
+
+(defn with-lset-tail [t x]
+  (cond
+    (lvar? x) t
+    (lset? x) (if-not (lset-empty? x) ; originally a "when". why reject empty one?
+                (lset t (:mems x))
+                (lset t #{:another-breaking-value-to-check}))))
+
+(defn non-empty-lset-first [x]
+  (first (:mems x)))
+
+(defn non-empty-lset-rest [x]
+  (let [r (rest (:mems x))]
+    (if (nil? r)
+      (:base x)
+      (lset (:base x) r))))
+
+;; =============================================================================
+;; Unification
 
 (defn unify-with-sequential* [u v s]
   (cond
@@ -938,6 +1101,10 @@
     (if (= u v)
       s
       nil))
+
+  clojure.lang.IPersistentSet
+  (unify-terms [u v s]
+    (unify-with-set* u v s))
 
   clojure.lang.Sequential
   (unify-terms [u v s]
@@ -2846,6 +3013,8 @@
           (recur (next t) s))
         s)))
 
+;; TO DO here (and possibly in other places in the code), consider whether to also add sets
+
   clojure.lang.IPersistentMap
   (-constrain-tree [t fc s]
     (loop [t (seq t) s s]
@@ -2913,3 +3082,149 @@
         :else fail))
     (fn [_ v _ r a]
       `(seqc ~(-reify a v r)))))
+
+;; =============================================================================
+;; CLP(Set)
+
+;;; mk
+
+
+(declare seto) ;  == unify n conde succeed fail
+
+;; to do when to check for set and when for lset. overall the general code!
+"namin does not have a different version of set and lset (it does for empty and non-empty though),
+ so her code does not care for this difference. I think I should convert all sets to lsets at the
+ entry to the code, and then assume lset. wondering about embedded sets, though. are they converted
+ in lset-normalize? surely not but they should. the other thing to care for is that reify reifies
+ lsets to sets (normalize should put all grounded terms in their members but what about embedded
+ sets and improper tails?"
+
+(defn unify-with-set* [u v s]
+  (let [uns (lset-normalize u #{} s) ; i moved this up for readability but it has a walk that I could postpone
+        vns (lset-normalize v #{} s)]
+    (when vns   ; u is a set or lset by unify-terms definition and v can't be an lvar by unify definition
+      (if (lset-empty? vns)
+        (bind s (if (= uns vns) succeed fail)) ; this is too low level aint it?
+        (let [x (lset-tail vns)]
+          (cond
+            (and (lvar? u) (= x u)
+                 (not (occurs-check u (:mems vns) s)))
+            (bind s                       ; check bind is as usual
+                  (let [n (lvar)]
+                    (== u (with-lset-tail n vns))
+                    (seto n)))
+            (lvar? uns)
+            (ext-no-check s uns vns)
+            (not (or (and (set? u) (empty? u))
+                     (and (lset? u) (lset-empty? u))))
+            (if (not (= (lset-tail uns) (lset-tail vns)))
+              (let [tu (non-empty-lset-first uns)
+                    ru (non-empty-lset-rest uns)
+                    tv (non-empty-lset-first vns)
+                    rv (non-empty-lset-rest vns)]
+                (bind s
+                      (let [n (lvar)]
+                        (conde
+                         [(== tu tv) (== ru rv) (seto ru)]
+                         [(== tu tv) (== uns rv)]
+                         [(== tu tv) (== ru vns)]
+                         [(== ru (lset n #{tv}))
+                          (== rv (lset n #{tu}))
+                          (seto n)]))))
+              ((let [t0 (non-empty-lset-first uns) ; what is this double parens??? executing a bind? (un?)doing an inc?
+                     ru (non-empty-lset-rest uns)
+                     vbase (:base vns)
+                     vmems (:mems vns)]
+                 (let [recfn (fn recfn [j acc]
+                               (if (empty? j)
+                                 fail
+                                 (let [tj (first j)
+                                       cj (rest j)
+                                       rj (if (and (empty? acc) (empty? cj))
+                                            vbase
+                                            (lset vbase (into acc cj)))]
+                                   (let [n (lvar)]
+                                     (conde
+                                      [(== t0 tj) (== ru rj) (seto ru)]
+                                      [(== t0 tj) (== uns rj)]
+                                      [(== t0 tj) (== ru vns)]
+                                      [(== x (lset n #{t0}))
+                                       (== (with-lset-tail n ru) (with-lset-tail n vns))
+                                       (seto n)()]
+                                      [(recfn cj (cons tj acc))])))))]
+                   (bind s (recfn vmems #{}))))))))))))
+
+(comment
+  (run* [q] (== #{} (lset #{})))
+  (run* [q] (== #{2} #{2}))
+  (run* [q] (== #{2} (lset #{q})))
+  (run* [q] (seto (lset #{})))
+  (run* [q] (seto  #{2}))
+  (run* [q] (seto (lset #{2})))
+  (run* [q](== (lset #{}) (lset (lvar) #{2})))
+  (run* [y s] (== #{1 2} #{y s}))
+
+  (run* [q] (== #{q 2} #{1 q}))
+  (run* [q] (== (lset q #{2}) (lset #{1} #{q})))
+  (run* [q] (== (lset q #{}) (lset #{1} #{})))
+
+  (run* [q] (== q #{1 q}))
+  (run* [q] (== q #{1 q}) (== q #{q 2}))
+  (run* [q] (fresh [x y r s] (== q [x y r s]) (== #{x r} #{y s})))
+  (run* [q] (fresh [z] (== q #{q #{1 z}})))
+  (run* [q] (== #{q 2} #{1 q}))
+  )
+
+;(declare composeg remcg ground-term? cgoal)
+(defn -seto
+  [x]
+  (reify
+    IConstraintStep
+    (-step [this s]
+      (reify
+        clojure.lang.IFn
+        (invoke [_ s]
+          (let [x (walk s x)]
+            (cond
+              (lvar? x) (when-not (some
+                                   #(= x (walk s %))
+                                   (constraints-for (:cs s) s x ::set-symbolo)) ; ni idea de si todo esto está bien
+                          ((composeg (remcg this)
+                                     (seto x)) s))
+              (lset-empty? x) ((remcg this) s)
+              (lset? x) (bind s (seto (:base x)))
+              (set? x) ((remcg this) s)
+              :else nil)))
+
+        IRunnable
+        (-runnable? [_]
+          (ground-term? x s))))
+
+    IConstraintOp
+    (-rator [_] `seto)
+    (-rands [_] [x]) ;; no completamente seguro de esta linea, featurec dropea un parámetro
+    IReifiableConstraint
+    (-reifyc [_ v r a]
+      `(seto ~x))
+    IConstraintWatchedStores
+    (-watched-stores [_] #{::subst ::set-seto}))) ;; ni idea de lo que hace esto aun
+
+(defn seto
+  [x]
+  (cgoal (-seto x)))
+
+
+;;; Lib
+(comment
+
+(defn subseto
+  (lambda [r1 r2]
+    (fresh [ri]
+      (uniono r1 ri r2))))
+
+(defn !subseto
+  (lambda [r1 r2]
+    (fresh [x]
+      (ino x r1)
+      (!ino x r2))))
+)
