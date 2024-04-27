@@ -912,7 +912,7 @@
 ;; =============================================================================
 ;; LSet
 
-(declare unify-with-set* lset lset?) ; to do order a little bit
+(declare unify-with-set* lset lset? lset-to-llist) ; to do order a little bit
 
 (deftype LSet [base mems ^{:unsynchronized-mutable true :tag int} cache]
 
@@ -971,19 +971,19 @@
 
   IReifyTerm
   (reify-term [v s]
-    (reify-term (into (:mems v) (:base v)) s))
+    (reify-term (lset-to-llist v) s))
 
   IWalkTerm
   (walk-term [v f]
-    (walk-term (into (:mems v) (:base v)) f))
+    (walk-term (lset-to-llist v) f))
 
   IOccursCheckTerm
   (occurs-check-term [v x s]
-    (occurs-check-term (into (:mems v) (:base v)) x s))
+    (occurs-check-term (lset-to-llist v) x s))
 
   IBuildTerm
   (build-term [u s]
-    (build-term (into (:mems u) (:base u)) s)))
+    (build-term (lset-to-llist u) s)))
 
 (defmethod print-method LSet [x ^Writer writer]
   (.write writer (.toString x)))
@@ -3115,7 +3115,7 @@
                     (seto n)))
             (lvar? uns)
             (ext-no-check s uns vns)
-            (not (or (and (set? u) (empty? u))
+            (not (or (and (set? u) (empty? u)) ; como ya tenemos a u normalizado en uns, podríamos mirar uns y quitar aqui una linea
                      (and (lset? u) (lset-empty? u))))
             (if (not (= (lset-tail uns) (lset-tail vns)))
               (let [tu (non-empty-lset-first uns)
@@ -3168,11 +3168,11 @@
   (run* [q] (== (lset q #{2}) (lset #{1} #{q})))
   (run* [q] (== (lset q #{}) (lset #{1} #{})))
 
-  (run* [q] (== q #{1 q}))
-  (run* [q] (== q #{1 q}) (== q #{q 2}))
-  (run* [q] (fresh [x y r s] (== q [x y r s]) (== #{x r} #{y s})))
-  (run* [q] (fresh [z] (== q #{q #{1 z}})))
-  (run* [q] (== #{q 2} #{1 q}))
+  (run* [q] (== q (lset q #{1})))
+  (run* [q] (== q (lset q #{1})) (== q (lset q #{2})))
+  (run* [q] (fresh [x y r s] (== q [x y r s]) (== (lset r x) (lset s y))))
+  (run* [q] (fresh [z] (== q (lset q (lset z #{1})))))
+  (run* [q] (== (lset q #{2}) (lset q #{1})))
   )
 
 ;(declare composeg remcg ground-term? cgoal)
