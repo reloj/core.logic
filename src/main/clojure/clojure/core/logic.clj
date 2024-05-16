@@ -626,6 +626,7 @@
 ;; =============================================================================
 ;; Logic Variables
 
+(declare lset-ext)
 (deftype LVar [id unique name oname hash meta]
   IVar
   clojure.lang.ILookup
@@ -680,7 +681,7 @@
 
       (not= v ::not-found)
       (if (tree-term? v)
-        (ext s u v)
+        (or (ext s u v) (lset-ext s u v))
         (if (-> u clojure.core/meta ::unbound)
           (ext-no-check s u (assoc (root-val s u) :v v))
           (ext-no-check s u v)))
@@ -914,7 +915,13 @@
 
 (declare unify-with-set* lset lset? lset-to-llist) ; to do order a little bit
 
-(deftype LSet [base mems ^{:unsynchronized-mutable true :tag int} cache]
+(deftype LSet [base mems ^{:unsynchronized-mutable true :tag int} cache meta]
+  ITreeTerm
+  clojure.lang.IObj
+  (meta [this]
+    meta)
+  (withMeta [this new-meta]
+    (LSet. base mems cache new-meta))
 
   ;; TO DO look into LCons for other interfaces to implement:
   ;; LConsSeq and LConsPrint??
@@ -994,20 +1001,18 @@
 (defn lset
   "Constructs a set that can hold logical variables, which can in turn substitute for
    sets with logical variables, etc."
-  ([] (LSet. #{} #{} -1))
-  ([mems] (LSet. #{} mems -1))
-  ([base mems] (LSet. base mems -1)))
+  ([] (LSet. #{} #{} -1 nil))
+  ([mems] (LSet. #{} mems -1 nil))
+  ([base mems] (LSet. base mems -1 nil)))
 
 (defn lset? [x]
   (instance? LSet x))
 
 (defn lset-to-llist [ls]
-  (println "DEBUG: Not sure I should be doing this...")
   (lcons (:base ls)
          (:mems ls)))
 
 (defn llist-to-lset [ll]
-  (println "DEBUG: Not sure I should be doing this...")
   (lset (lfirst ll)
         (lnext ll)))
 
@@ -3099,6 +3104,17 @@
  lsets to sets (normalize should put all grounded terms in their members but what about embedded
  sets and improper tails?"
 
+(defn lset-ext [s u v]
+  (when (and (lvar? u) (lset? v))
+    (let [vns (lset-normalize v #{} s)
+          vtail (lset-tail vns)]
+      (if (and (= u vtail)
+               (not (occurs-check s u (:mems vns))))
+        (bind s ; check bind is as usual
+              (let [n (lvar)]
+                (== u (with-lset-tail n vns))
+                (seto n)))))))
+
 (defn unify-with-set* [u v s]
   (let [uns (lset-normalize u #{} s) ; i moved this up for readability but it has a walk that I could postpone
         vns (lset-normalize v #{} s)]
@@ -3107,14 +3123,9 @@
         (bind s (if (= uns vns) succeed fail)) ; this is too low level aint it?
         (let [x (lset-tail vns)]
           (cond
-            (and (lvar? u) (= x u)
-                 (not (occurs-check u (:mems vns) s)))
-            (bind s                       ; check bind is as usual
-                  (let [n (lvar)]
-                    (== u (with-lset-tail n vns))
-                    (seto n)))
-            (lvar? uns)
-            (ext-no-check s uns vns)
+            ;;(lvar? uns)
+            ;;(ext-no-check s uns vns)
+
             (not (or (and (set? u) (empty? u)) ; como ya tenemos a u normalizado en uns, podríamos mirar uns y quitar aqui una linea
                      (and (lset? u) (lset-empty? u))))
             (if (not (= (lset-tail uns) (lset-tail vns)))
