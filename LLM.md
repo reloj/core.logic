@@ -43,9 +43,9 @@ Important status facts:
   scaffold were quarantined in comments to restore the namespace. Before that
   repair, compilation failed at `core/logic.clj:890` on unresolved `define`,
   followed by an invalid attempt to take the value of the `llist` macro.
-* The ordinary unifier protocol remains active; the unfinished `IPersistentSet`
-  dispatch is not yet enabled. The later library relation block remains inside
-  a `(comment ...)` form.
+* The ordinary unifier protocol remains active. Its persistent-set dispatch now
+  handles fully ground set equality; open-set rewriting is not yet enabled.
+  The later library relation block remains inside a `(comment ...)` form.
 * A bounded `SetTerm` unifier is now active. It supports extensional equality
   for fully ground `SetTerm` values and ground Clojure sets, including member
   permutation, but rejects open terms until Figure 3 rewriting is ported.
@@ -108,11 +108,9 @@ not in this branch.
 These choices are reasonable directions, but each needs a small proof-oriented
 test before being treated as final:
 
-* Use `lcons`/`llist` rather than Scheme vectors. This reuses core.logic's
-  existing improper-list machinery and makes open tails natural. The tradeoff
-  is that ordinary sequences and set terms can look alike; predicates must
-  remain explicit and must never accidentally treat a Clojure sequence as an
-  open set.
+* The exploratory code uses `lcons`/`llist`, but the executable slice uses an
+  explicit `SetTerm` record. This avoids treating ordinary improper lists as
+  sets and makes the base/member invariant visible to the type system.
 * Use Clojure `IPersistentSet` for user-facing ground sets, while normalizing
   them to the internal open-tail representation for solving. This is idiomatic
   at the API boundary, but nested Clojure sets cannot contain logic variables
@@ -177,7 +175,9 @@ Keep each step independently reviewable and semantically close to the paper:
    members, one open tail, and the empty-set case. Add representation tests
    only; do not change unification yet.
 2. Add normalization, member/tail operations, and occurs/walk/reify support.
-   Test ground, open, nested, aliased, duplicate, and cyclic cases.
+  The executable implementation now covers representation, nested-tail
+  normalization, walking, occurs-check, building, and ground equality.
+  Remaining tests must cover aliased and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
   constraints. Ground equality is now covered; next activate only the five
   equality tests, then add the reference
@@ -237,9 +237,8 @@ ground enumeration, and documented multiplicity/order behavior.
 
 The project-compatible Leiningen/Clojure 1.7 baseline is green at 432 tests
 and 677 assertions. Ground SetTerm equality is now executable. The next slice
-should port the first open-tail Figure 3 rewrite and activate exactly one
-equality test
-(`clpset-run-eq-1`) be activated. That test is the cheapest discriminating
-check for constructor names, constraint lifecycle, reification, and
-`IPersistentSet` dispatch. Only after it passes should the remaining equality
-examples be activated.
+should introduce a residual set-equality constraint and port the first
+open-tail Figure 3 rewrite, then activate exactly one equality test
+(`clpset-run-eq-1`). That test is the cheapest discriminating check for goal
+routing, constraint lifecycle, reification, and stream branching. Only after
+it passes should the remaining equality examples be activated.
