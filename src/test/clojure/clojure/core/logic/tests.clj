@@ -3840,3 +3840,30 @@
          (!subseto #{#{} 1 2} #{#{} 1 2 3}))
        '())))
 )
+
+(deftest set-term-representation-1
+  (let [tail (lvar 'tail)
+        term (set-term tail [1 2])]
+    (is (set-term? term))
+    (is (= tail (set-term-base term)))
+    (is (= [1 2] (set-term-members term)))
+    (is (= tail (set-term-tail term)))))
+
+(deftest set-term-representation-2
+  (let [term (set-term #{} [1 2])]
+    (is (= term (set-term #{} [1 2])))
+    (is (= #{} (set-term-tail term)))))
+
+(deftest set-term-normalization-1
+  (let [tail (lvar 'tail)
+        term (set-term (set-term tail [1]) [2])]
+    (is (= (set-term tail [1 2])
+      (normalize-set term empty-s)))
+    (is (= (normalize-set term empty-s)
+      (normalize-set (normalize-set term empty-s) empty-s)))))
+
+(deftest set-term-normalization-2
+  (is (= #{1 2}
+    (normalize-set #{1 2} empty-s)))
+  (is (= (set-term #{} [1 2])
+    (normalize-set #{} [1 2] empty-s))))

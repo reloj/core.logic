@@ -912,6 +912,7 @@
 
 ;; =============================================================================
 ;; Constraint store mgmt translation
+(comment
 (define s->S (lambda (s) (car s)))
 (define s->C (lambda (s) (cadr s)))
 (define C->set (lambda (C) (car C)))
@@ -930,9 +931,58 @@
 (define with-C-disj (lambda (C cs) (list (C->set C) (C->=/= C) (C->!in C) (C->union C) cs (C->symbol C))))
 (define with-C-symbol (lambda (C cs) (list (C->set C) (C->=/= C) (C->!in C) (C->union C) (C->disj C) cs)))
 (define empty-s '(() (() () () () () ())))
+)
 
 ;; =============================================================================
 ;; Set terms
+
+(defrecord SetTerm [base members])
+
+(defn set-term
+  "Creates an internal finite-set term with an open tail and members."
+  [base members]
+  (SetTerm. base (vec members)))
+
+(defn set-term?
+  [x]
+  (instance? SetTerm x))
+
+(defn set-term-base
+  [x]
+  (:base x))
+
+(defn set-term-members
+  [x]
+  (:members x))
+
+(defn set-term-tail
+  [x]
+  (if (set-term? x)
+    (set-term-base x)
+    x))
+
+(defn normalize-set
+  ([x s]
+   (normalize-set x [] s))
+  ([x extra-members s]
+   (let [extra-members (vec extra-members)]
+     (cond
+       (set-term? x)
+       (let [base (walk s (set-term-base x))
+             members (into (set-term-members x) extra-members)]
+         (if (set-term? base)
+           (recur base members s)
+           (set-term base members)))
+
+       (and (set? x) (seq extra-members))
+       (set-term x extra-members)
+
+       (seq extra-members)
+       (set-term x extra-members)
+
+       :else x))))
+
+(comment
 
 "Design consideration:
 looking into Nada Amin's work, her initial set term representation was a plain scheme vector.
@@ -1043,6 +1093,7 @@ it should, as sets are seqs:"
                                         (== (with-set-tail n ru) (with-set-tail n vns))
                                         (seto n))]
                                      [(loopj cj (cons tj acc))])))))))))))))))) ; what is this recursion
+)
 
 (defn unify-with-sequential* [u v s]
   (cond
@@ -1085,10 +1136,6 @@ it should, as sets are seqs:"
       s
       nil))
 
-  clojure.lang.IPersistentSet
-  (unify-terms [u v s]
-    (unify-with-set* u v s))
-
   clojure.lang.Sequential
   (unify-terms [u v s]
     (unify-with-sequential* u v s))
@@ -1102,7 +1149,7 @@ it should, as sets are seqs:"
       (map? v)
       (unify-with-map* u v s)
 
-      :else nil)))
+  :else nil)))
 
 ;; =============================================================================
 ;; Reification
