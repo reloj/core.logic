@@ -3935,3 +3935,23 @@
     (is (= ':- separator))
     (is (= (set-term '_0 [1 2]) term))
     (is (= '(set _0) constraint))))
+
+(deftest set-term-self-member-rewrite-3
+  (let [[[term separator constraint]]
+        (run* [q]
+          (fresh [z]
+            (== q #{q #{z 1}})))]
+    (is (= ':- separator))
+    (is (= '_0 (set-term-base term)))
+    (is (= 1 (count (set-term-members term))))
+    (is (= #{1 '_1} (first (set-term-members term))))
+    (is (= '(set _0) constraint))))
+
+(deftest set-term-self-member-rewrite-4
+  (let [[[term separator constraint]]
+        (run* [q]
+          (== #{q 2} #{q 1}))]
+    (is (= ':- separator))
+    (is (= '_0 (set-term-base term)))
+    (is (= #{1 2} (set (set-term-members term))))
+    (is (= '(set _0) constraint))))

@@ -1531,6 +1531,25 @@ it should, as sets are seqs:"
               a (ext-no-check a u term)]
           ((seto tail) a))))))
 
+(defn shared-member-set-rewrite
+  [u v a]
+  (when (and (set-value? u) (set-value? v))
+    (let [um (if (set? u) u (set-term-members u))
+          vm (if (set? v) v (set-term-members v))
+          shared (filter lvar? (clojure.set/intersection (set um) (set vm)))
+          only-u (remove (set vm) um)
+          only-v (remove (set um) vm)]
+      (when (and (= 1 (count shared))
+                 (seq only-u)
+                 (seq only-v)
+                 (not= (set only-u) (set only-v)))
+        (let [variable (first shared)
+              tail (lvar)
+              term (set-term tail (concat only-u only-v))
+              a (unify a variable term)]
+          (when a
+            ((seto tail) a)))))))
+
 (defn ext-run-csg [u v]
   (fn [a]
     (ext-run-cs a u v)))
@@ -1541,6 +1560,7 @@ it should, as sets are seqs:"
   (fn [a]
     (or (self-member-set-rewrite u v a)
         (self-member-set-rewrite v u a)
+      (shared-member-set-rewrite u v a)
         (if (closed-set-equality? u v)
           (unify-closed-set-terms u v a)
           (let [has-cs? (pos? (count (:cs a)))]
