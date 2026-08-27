@@ -63,13 +63,17 @@ Important status facts:
   as `q = {q, 1}` rewrites to an open `SetTerm` with member `1` and a fresh tail,
   while retaining a reified `(set _0)` residual constraint. This is a narrow
   Fig. 3 branch, not yet the general equality procedure.
+* Repeated self-membership now preserves existing members and reuses the open
+  tail. The current `eq-2`-style case is a single normalized branch; it does
+  not yet reproduce the reference's five nondeterministic answers. That
+  multiplicity remains an explicit compatibility gap.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 435 tests and 683
+* With Leiningen installed, `lein test` now passes 436 tests and 686
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -107,6 +111,8 @@ The first residual open-tail constraint is `seto`. It validates that a tail is
 a set when it becomes known and reifies as `(set tail)`. The current rewrite
 handles only a logic variable equated with a set containing that same variable;
 the remaining member-selection and tail-sharing branches are still pending.
+Repeated self-membership is covered as a preservation regression, but its
+reference-level branch multiplicity is still pending.
 
 The branch attempts to port the Scheme representation and equality solver:
 
