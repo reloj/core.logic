@@ -936,7 +936,28 @@
 ;; =============================================================================
 ;; Set terms
 
-(defrecord SetTerm [base members])
+(defrecord SetTerm [base members]
+  IReifyTerm
+  (reify-term [v s]
+    (let [s (-reify* s base)]
+      (reduce (fn [s member]
+                (-reify* s member))
+              s
+              members)))
+
+  IWalkTerm
+  (walk-term [v f]
+    (SetTerm. (f base) (mapv f members)))
+
+  IOccursCheckTerm
+  (occurs-check-term [v x s]
+    (or (occurs-check s x base)
+        (some #(occurs-check s x %) members)))
+
+  IBuildTerm
+  (build-term [v s]
+    (let [s (build s base)]
+      (reduce build s members))))
 
 (defn set-term
   "Creates an internal finite-set term with an open tail and members."
@@ -1166,7 +1187,9 @@ it should, as sets are seqs:"
     (loop [v v s s]
       (if (seq v)
         (recur (next v) (-reify* s (first v)))
-        s))))
+        s)))
+
+)
 
 ;; =============================================================================
 ;; Walk Term

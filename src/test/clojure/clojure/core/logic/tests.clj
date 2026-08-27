@@ -3867,3 +3867,20 @@
     (normalize-set #{1 2} empty-s)))
   (is (= (set-term #{} [1 2])
     (normalize-set #{} [1 2] empty-s))))
+
+(deftest set-term-walk-1
+  (let [tail (lvar 'tail)
+        s (ext-no-check empty-s tail #{})
+        term (set-term tail [tail 1])]
+    (is (= (set-term #{} [#{} 1])
+           (walk* s term)))))
+
+(deftest set-term-occurs-check-1
+  (let [x (lvar 'x)]
+    (is (occurs-check empty-s x (set-term #{} [x])))
+    (is (occurs-check empty-s x (set-term x [])))
+    (is (not (occurs-check empty-s x (set-term #{} [1]))))))
+
+(deftest set-term-build-1
+  (let [term (set-term #{} [1 2])]
+    (is (= empty-s (build empty-s term)))))
