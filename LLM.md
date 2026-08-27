@@ -52,14 +52,13 @@ Important status facts:
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes the existing baseline:
-  427 tests and 668 assertions, with 0 failures and 0 errors. This validates
-  that the quarantine and executable representation slice did not disturb
-  ordinary core.logic behavior.
-* The later `b8dad1c` change, `walk-term` for `IPersistentSet`, fixes a real
-  general core.logic issue (walking sets could consume the stack), but it is
-  separate from the commented CLP(Set) solver and should not be conflated with
-  enabling it.
+* With Leiningen installed, `lein test` now passes 430 tests and 673
+  assertions, with 0 failures and 0 errors. This validates the executable
+  representation/protocol slice without disturbing ordinary core.logic
+  behavior.
+* The branch now includes the later `b8dad1c`-style `walk-term` implementation
+  for `IPersistentSet`. This is required because a persistent set otherwise
+  falls through to the generic walker and recursively walks itself forever.
 
 Thus the honest answer to "does the current code work for all current Fig. 3
 tests?" is no: the tests are inactive and the implementation is inactive. The
@@ -68,14 +67,15 @@ acceptance suite.
 
 ## What has been translated
 
-The first executable representation slice now defines `SetTerm`, `set-term`,
+The executable representation slice now defines `SetTerm`, `set-term`,
 `set-term?`, `set-term-base`, `set-term-members`, `set-term-tail`, and
 `normalize-set` in `core.logic.clj`. `SetTerm` deliberately stores the open
 tail separately from an ordered vector of members. Normalization flattens
 nested internal set tails, preserves member order, is idempotent for this
 representation, and leaves ordinary ground Clojure sets unchanged unless
-extra members are explicitly supplied. It does not yet integrate with
-unification, walking, occurs-check, or reification.
+extra members are explicitly supplied. It does not yet integrate with set
+unification, but it now integrates with walking, occurs-check, and term
+building; focused tests cover those paths.
 
 The branch attempts to port the Scheme representation and equality solver:
 
