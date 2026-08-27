@@ -49,13 +49,16 @@ Important status facts:
 * A bounded `SetTerm` unifier is now active. It supports extensional equality
   for fully ground `SetTerm` values and ground Clojure sets, including member
   permutation, but rejects open terms until Figure 3 rewriting is ported.
+* Closed finite set equality is now relational: `==` can enumerate member
+  correspondences when a `SetTerm` has the empty tail and logic variables in
+  its members. This is intentionally separate from open-tail rewriting.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 432 tests and 677
+* With Leiningen installed, `lein test` now passes 433 tests and 679
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -83,6 +86,11 @@ building; focused tests cover those paths.
 Fully ground equality is also executable: the unifier compares the extensional
 union of members and ground tails, including permutation-independent equality
 with ordinary Clojure sets. Open-tail equality remains intentionally unsupported.
+
+Closed terms with member variables use a lazy matcher in `==` that enumerates
+possible member correspondences through core.logic streams. Unequal cardinality
+fails immediately; open tails still fail until the residual Fig. 3 constraint
+is implemented.
 
 The branch attempts to port the Scheme representation and equality solver:
 
@@ -179,7 +187,8 @@ Keep each step independently reviewable and semantically close to the paper:
   normalization, walking, occurs-check, building, and ground equality.
   Remaining tests must cover aliased and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
-  constraints. Ground equality is now covered; next activate only the five
+  constraints. Ground and closed relational equality are now covered; next
+  activate only the five
   equality tests, then add the reference
    pair-of-sets nondeterminism regression. Compare normalized answer multisets
    and branch counts with the Scheme oracle.
