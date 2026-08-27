@@ -1445,6 +1445,8 @@ it should, as sets are seqs:"
   (into (subvec members 0 index)
         (subvec members (inc index))))
 
+(declare closed-set-equality? unify-closed-set-terms)
+
 (defn match-closed-set-members
   [s left right]
   (if (empty? left)
@@ -1455,7 +1457,9 @@ it should, as sets are seqs:"
                 (when (seq indices)
                   (let [index (first indices)
                         candidate (nth right index)
-                        matched (unify s member candidate)]
+                    matched (if (closed-set-equality? member candidate)
+                          (unify-closed-set-terms member candidate s)
+                          (unify s member candidate))]
                     (if matched
                       (mplus (match-closed-set-members
                                matched remaining-left

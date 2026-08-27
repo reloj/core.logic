@@ -3913,3 +3913,8 @@
   (is (= '()
          (run* [q]
            (== #{q 1} #{1 2 3})))))
+
+(deftest set-term-nested-relational-equality-1
+  (is (= '(1)
+         (run* [q]
+           (== #{#{q}} #{#{1}})))))
