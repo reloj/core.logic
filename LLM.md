@@ -52,13 +52,15 @@ Important status facts:
 * Closed finite set equality is now relational: `==` can enumerate member
   correspondences when a `SetTerm` has the empty tail and logic variables in
   its members. This is intentionally separate from open-tail rewriting.
+* Nested closed sets are routed through the same relational matcher, so logic
+  variables inside nested finite sets are covered without enabling open tails.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 433 tests and 679
+* With Leiningen installed, `lein test` now passes 434 tests and 680
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -88,9 +90,9 @@ union of members and ground tails, including permutation-independent equality
 with ordinary Clojure sets. Open-tail equality remains intentionally unsupported.
 
 Closed terms with member variables use a lazy matcher in `==` that enumerates
-possible member correspondences through core.logic streams. Unequal cardinality
-fails immediately; open tails still fail until the residual Fig. 3 constraint
-is implemented.
+possible member correspondences through core.logic streams, including nested
+closed sets. Unequal cardinality fails immediately; open tails still fail until
+the residual Fig. 3 constraint is implemented.
 
 The branch attempts to port the Scheme representation and equality solver:
 
