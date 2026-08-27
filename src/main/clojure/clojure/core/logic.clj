@@ -1003,6 +1003,31 @@
 
        :else x))))
 
+(defn ground-set-term?
+  [s x]
+  (let [x (walk s x)]
+    (cond
+      (lvar? x) false
+      (set-term? x) (and (ground-set-term? s (set-term-base x))
+                         (every? #(ground-set-term? s %) (set-term-members x)))
+      (coll? x) (every? #(ground-set-term? s %) x)
+      :else true)))
+
+(defn ground-set-value
+  [s x]
+  (let [x (normalize-set (walk s x) s)]
+    (if (set-term? x)
+      (clojure.set/union (ground-set-value s (set-term-base x))
+                         (set (map #(ground-set-value s %) (set-term-members x))))
+      x)))
+
+(defn unify-with-ground-set-term*
+  [u v s]
+  (when (and (ground-set-term? s u)
+             (ground-set-term? s v)
+             (= (ground-set-value s u) (ground-set-value s v)))
+    s))
+
 (comment
 
 "Design consideration:
@@ -1155,6 +1180,18 @@ it should, as sets are seqs:"
   (unify-terms [u v s]
     (if (= u v)
       s
+      nil))
+
+  clojure.lang.IPersistentSet
+  (unify-terms [u v s]
+    (if (or (set-term? u) (set-term? v))
+      (unify-with-ground-set-term* u v s)
+      (if (= u v) s nil)))
+
+  SetTerm
+  (unify-terms [u v s]
+    (if (or (set-term? u) (set-term? v))
+      (unify-with-ground-set-term* u v s)
       nil))
 
   clojure.lang.Sequential

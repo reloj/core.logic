@@ -3884,3 +3884,22 @@
 (deftest set-term-build-1
   (let [term (set-term #{} [1 2])]
     (is (= empty-s (build empty-s term)))))
+
+(deftest set-term-ground-unification-1
+  (is (= empty-s
+         (unify empty-s
+                (set-term #{} [1 2])
+      (set-term #{} [2 1]))))
+  (is (nil? (unify empty-s
+                   (set-term #{} [1 2])
+         (set-term #{} [1 3]))))
+  (is (= empty-s
+         (unify empty-s
+                (set-term #{} [1 2])
+        #{1 2}))))
+
+(deftest set-term-open-unification-1
+  (let [x (lvar 'x)]
+    (is (nil? (unify empty-s
+                    (set-term #{} [x])
+          (set-term #{} [1]))))))
