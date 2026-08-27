@@ -1423,6 +1423,60 @@ it should, as sets are seqs:"
 
 (def u# fail)
 
+(defn set-value?
+  [x]
+  (or (set? x) (set-term? x)))
+
+(defn closed-set-term?
+  [x]
+  (and (set-term? x)
+       (= #{} (set-term-base x))
+       (every? #(or (not (set-term? %)) (closed-set-term? %))
+               (set-term-members x))))
+
+(defn as-closed-set-term
+  [x]
+  (if (set? x)
+    (set-term #{} x)
+    x))
+
+(defn remove-set-member
+  [members index]
+  (into (subvec members 0 index)
+        (subvec members (inc index))))
+
+(defn match-closed-set-members
+  [s left right]
+  (if (empty? left)
+    (when (empty? right) s)
+    (let [member (first left)
+          remaining-left (next left)]
+      (letfn [(try-indices [indices]
+                (when (seq indices)
+                  (let [index (first indices)
+                        candidate (nth right index)
+                        matched (unify s member candidate)]
+                    (if matched
+                      (mplus (match-closed-set-members
+                               matched remaining-left
+                               (remove-set-member right index))
+                             (fn [] (try-indices (next indices))))
+                      (try-indices (next indices))))))]
+        (try-indices (range (count right)))))))
+
+(defn unify-closed-set-terms
+  [u v s]
+  (let [u (as-closed-set-term (walk s u))
+        v (as-closed-set-term (walk s v))]
+    (when (and (closed-set-term? u) (closed-set-term? v))
+      (match-closed-set-members s
+                                (set-term-members u)
+                                (set-term-members v)))))
+
+(defn closed-set-equality?
+  [u v]
+  (and (set-value? u) (set-value? v)))
+
 (defn ext-run-csg [u v]
   (fn [a]
     (ext-run-cs a u v)))
@@ -1431,13 +1485,15 @@ it should, as sets are seqs:"
   "A goal that attempts to unify terms u and v."
   [u v]
   (fn [a]
-    (let [has-cs? (pos? (count (:cs a)))]
-      (let [ap (unify (if has-cs? (assoc a :vs []) a) u v)
-            vs (if has-cs? (:vs ap))
-            changed? (pos? (count vs))]
-        (if changed?
-          ((run-constraints* vs (:cs ap) ::subst) (assoc ap :vs nil))
-          ap)))))
+    (if (closed-set-equality? u v)
+      (unify-closed-set-terms u v a)
+      (let [has-cs? (pos? (count (:cs a)))]
+        (let [ap (unify (if has-cs? (assoc a :vs []) a) u v)
+              vs (if has-cs? (:vs ap))
+              changed? (pos? (count vs))]
+          (if changed?
+            ((run-constraints* vs (:cs ap) ::subst) (assoc ap :vs nil))
+            ap))))))
 
 (defn- bind-conde-clause [a]
   (fn [g-rest]

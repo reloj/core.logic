@@ -3903,3 +3903,13 @@
     (is (nil? (unify empty-s
                     (set-term #{} [x])
           (set-term #{} [1]))))))
+
+(deftest set-term-closed-relational-equality-1
+  (is (= '((1 2) (2 1))
+         (run* [q]
+           (fresh [x y]
+             (== q [x y])
+             (== #{x y} #{1 2})))))
+  (is (= '()
+         (run* [q]
+           (== #{q 1} #{1 2 3})))))
