@@ -67,13 +67,17 @@ Important status facts:
   tail. The current `eq-2`-style case is a single normalized branch; it does
   not yet reproduce the reference's five nondeterministic answers. That
   multiplicity remains an explicit compatibility gap.
+* Additional narrow rewrites now cover nested self-membership and a shared
+  variable appearing as a member on both sides, including `#{q 2} = #{q 1}`.
+  These produce structurally correct open terms, but they are not a general
+  replacement for Figure 3's member-selection procedure.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 436 tests and 686
+* With Leiningen installed, `lein test` now passes 438 tests and 695
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -108,9 +112,11 @@ closed sets. Unequal cardinality fails immediately; open tails still fail until
 the residual Fig. 3 constraint is implemented.
 
 The first residual open-tail constraint is `seto`. It validates that a tail is
-a set when it becomes known and reifies as `(set tail)`. The current rewrite
-handles only a logic variable equated with a set containing that same variable;
-the remaining member-selection and tail-sharing branches are still pending.
+a set when it becomes known and reifies as `(set tail)`. The current rewrites
+handle self-membership, nested self-membership, repeated self-membership
+preservation, and one shared-variable cross-side case. General member
+selection, open/open tail sharing, and reference-level multiplicity are still
+pending.
 Repeated self-membership is covered as a preservation regression, but its
 reference-level branch multiplicity is still pending.
 
@@ -210,8 +216,9 @@ Keep each step independently reviewable and semantically close to the paper:
   Remaining tests must cover aliased and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
   constraints. Ground, closed relational, and the first self-membership open
-  case are now covered; the remaining work requires the other member-selection
-  branches and residual constraint cases. Then activate only the five
+  cases are now covered; the remaining work requires the other member-selection
+  branches, open/open tail sharing, and residual constraint cases. Then
+  activate only the five
   equality tests, then add the reference
    pair-of-sets nondeterminism regression. Compare normalized answer multisets
    and branch counts with the Scheme oracle.
