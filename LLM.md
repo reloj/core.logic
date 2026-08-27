@@ -46,13 +46,16 @@ Important status facts:
 * The ordinary unifier protocol remains active; the unfinished `IPersistentSet`
   dispatch is not yet enabled. The later library relation block remains inside
   a `(comment ...)` form.
+* A bounded `SetTerm` unifier is now active. It supports extensional equality
+  for fully ground `SetTerm` values and ground Clojure sets, including member
+  permutation, but rejects open terms until Figure 3 rewriting is ported.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 430 tests and 673
+* With Leiningen installed, `lein test` now passes 432 tests and 677
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -76,6 +79,10 @@ representation, and leaves ordinary ground Clojure sets unchanged unless
 extra members are explicitly supplied. It does not yet integrate with set
 unification, but it now integrates with walking, occurs-check, and term
 building; focused tests cover those paths.
+
+Fully ground equality is also executable: the unifier compares the extensional
+union of members and ground tails, including permutation-independent equality
+with ordinary Clojure sets. Open-tail equality remains intentionally unsupported.
 
 The branch attempts to port the Scheme representation and equality solver:
 
@@ -172,7 +179,8 @@ Keep each step independently reviewable and semantically close to the paper:
 2. Add normalization, member/tail operations, and occurs/walk/reify support.
    Test ground, open, nested, aliased, duplicate, and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
-   constraints. Activate only the five equality tests, then add the reference
+  constraints. Ground equality is now covered; next activate only the five
+  equality tests, then add the reference
    pair-of-sets nondeterminism regression. Compare normalized answer multisets
    and branch counts with the Scheme oracle.
 4. Integrate set unification into the existing unifier and constraint-store
@@ -227,10 +235,10 @@ ground enumeration, and documented multiplicity/order behavior.
 
 ## Immediate next check
 
-The project-compatible Leiningen/Clojure 1.7 baseline is green at 427 tests
-and 668 assertions. The next slice should add set-aware walking, occurs-check,
-and reification tests without enabling the incomplete equality solver.
-Only after those invariants are executable should exactly one equality test
+The project-compatible Leiningen/Clojure 1.7 baseline is green at 432 tests
+and 677 assertions. Ground SetTerm equality is now executable. The next slice
+should port the first open-tail Figure 3 rewrite and activate exactly one
+equality test
 (`clpset-run-eq-1`) be activated. That test is the cheapest discriminating
 check for constructor names, constraint lifecycle, reification, and
 `IPersistentSet` dispatch. Only after it passes should the remaining equality
