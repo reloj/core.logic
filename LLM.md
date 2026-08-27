@@ -54,6 +54,11 @@ Important status facts:
   its members. This is intentionally separate from open-tail rewriting.
 * Nested closed sets are routed through the same relational matcher, so logic
   variables inside nested finite sets are covered without enabling open tails.
+* The next Fig. 3 implementation must introduce a branching goal layer and a
+  residual constraint representation. The existing `cgoal` invocation path
+  propagates one state at a time and cannot safely receive a `Choice` as the
+  result of a constraint step. Open-set alternatives must therefore branch as
+  goals, with residual constraints reified separately.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
@@ -189,8 +194,9 @@ Keep each step independently reviewable and semantically close to the paper:
   normalization, walking, occurs-check, building, and ground equality.
   Remaining tests must cover aliased and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
-  constraints. Ground and closed relational equality are now covered; next
-  activate only the five
+  constraints. Ground and closed relational equality are now covered; the
+  remaining work requires a branching goal plus residual constraint layer.
+  Then activate only the five
   equality tests, then add the reference
    pair-of-sets nondeterminism regression. Compare normalized answer multisets
    and branch counts with the Scheme oracle.
