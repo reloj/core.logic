@@ -59,13 +59,17 @@ Important status facts:
   propagates one state at a time and cannot safely receive a `Choice` as the
   result of a constraint step. Open-set alternatives must therefore branch as
   goals, with residual constraints reified separately.
+* The first open-tail case is now implemented: self-membership equality such
+  as `q = {q, 1}` rewrites to an open `SetTerm` with member `1` and a fresh tail,
+  while retaining a reified `(set _0)` residual constraint. This is a narrow
+  Fig. 3 branch, not yet the general equality procedure.
 * The entire translated Fig. 3 test block in `tests.clj` is inside a
   `(comment ...)` form. These tests are not loaded by `clojure.test`.
 * The proposed `subseto` and `!subseto` definitions are also commented out.
 * Consequently, the branch does not currently provide usable first-class set
   support, and no Fig. 3 test is currently a repository test that can pass or
   fail.
-* With Leiningen installed, `lein test` now passes 434 tests and 680
+* With Leiningen installed, `lein test` now passes 435 tests and 683
   assertions, with 0 failures and 0 errors. This validates the executable
   representation/protocol slice without disturbing ordinary core.logic
   behavior.
@@ -98,6 +102,11 @@ Closed terms with member variables use a lazy matcher in `==` that enumerates
 possible member correspondences through core.logic streams, including nested
 closed sets. Unequal cardinality fails immediately; open tails still fail until
 the residual Fig. 3 constraint is implemented.
+
+The first residual open-tail constraint is `seto`. It validates that a tail is
+a set when it becomes known and reifies as `(set tail)`. The current rewrite
+handles only a logic variable equated with a set containing that same variable;
+the remaining member-selection and tail-sharing branches are still pending.
 
 The branch attempts to port the Scheme representation and equality solver:
 
@@ -194,9 +203,9 @@ Keep each step independently reviewable and semantically close to the paper:
   normalization, walking, occurs-check, building, and ground equality.
   Remaining tests must cover aliased and cyclic cases.
 3. Port Figure 3 equality rewriting as a private relation with no other
-  constraints. Ground and closed relational equality are now covered; the
-  remaining work requires a branching goal plus residual constraint layer.
-  Then activate only the five
+  constraints. Ground, closed relational, and the first self-membership open
+  case are now covered; the remaining work requires the other member-selection
+  branches and residual constraint cases. Then activate only the five
   equality tests, then add the reference
    pair-of-sets nondeterminism regression. Compare normalized answer multisets
    and branch counts with the Scheme oracle.
@@ -252,10 +261,10 @@ ground enumeration, and documented multiplicity/order behavior.
 
 ## Immediate next check
 
-The project-compatible Leiningen/Clojure 1.7 baseline is green at 432 tests
-and 677 assertions. Ground SetTerm equality is now executable. The next slice
-should introduce a residual set-equality constraint and port the first
-open-tail Figure 3 rewrite, then activate exactly one equality test
+The project-compatible Leiningen/Clojure 1.7 baseline is green at 435 tests
+and 683 assertions. The first self-membership open-tail rewrite is now
+executable. The next slice should port the remaining Figure 3 member-selection
+branches, then activate the translated equality examples
 (`clpset-run-eq-1`). That test is the cheapest discriminating check for goal
 routing, constraint lifecycle, reification, and stream branching. Only after
 it passes should the remaining equality examples be activated.
