@@ -3905,7 +3905,7 @@
           (set-term #{} [1]))))))
 
 (deftest set-term-closed-relational-equality-1
-  (is (= '((1 2) (2 1))
+  (is (= '([2 1] [1 2])
          (run* [q]
            (fresh [x y]
              (== q [x y])
@@ -3918,3 +3918,11 @@
   (is (= '(1)
          (run* [q]
            (== #{#{q}} #{#{1}})))))
+
+(deftest set-term-self-member-rewrite-1
+  (let [[[term separator constraint]]
+        (run* [q]
+          (== q #{q 1}))]
+    (is (= ':- separator))
+    (is (= (set-term '_0 [1]) term))
+    (is (= '(set _0) constraint))))

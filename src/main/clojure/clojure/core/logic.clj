@@ -1481,6 +1481,49 @@ it should, as sets are seqs:"
   [u v]
   (and (set-value? u) (set-value? v)))
 
+(declare cgoal remcg)
+
+(defn -seto
+  [x]
+  (reify
+    IConstraintStep
+    (-step [this s]
+      (let [xv (walk s x)]
+        (reify
+          clojure.lang.IFn
+          (invoke [_ s]
+            (let [xv (walk s x)]
+              (cond
+                (lvar? xv) s
+                (set-value? xv) ((remcg this) s)
+                :else nil)))
+          IRunnable
+          (-runnable? [_]
+            (not (lvar? (walk s x)))))))
+    IConstraintOp
+    (-rator [_] 'set)
+    (-rands [_] [x])
+    IReifiableConstraint
+    (-reifyc [_ _ r s]
+      (list 'set (-reify s x r)))
+    IConstraintWatchedStores
+    (-watched-stores [_] #{::subst})))
+
+(defn seto
+  "Constrains x to be a finite set term or ground Clojure set."
+  [x]
+  (cgoal (-seto x)))
+
+(defn self-member-set-rewrite
+  [u v a]
+  (when (and (lvar? u) (set-value? v))
+    (let [members (if (set? v) v (set-term-members v))]
+      (when (some #(= u %) members)
+        (let [tail (lvar)
+              term (set-term tail (remove #(= u %) members))
+              a (ext-no-check a u term)]
+          ((seto tail) a))))))
+
 (defn ext-run-csg [u v]
   (fn [a]
     (ext-run-cs a u v)))
@@ -1489,15 +1532,17 @@ it should, as sets are seqs:"
   "A goal that attempts to unify terms u and v."
   [u v]
   (fn [a]
-    (if (closed-set-equality? u v)
-      (unify-closed-set-terms u v a)
-      (let [has-cs? (pos? (count (:cs a)))]
-        (let [ap (unify (if has-cs? (assoc a :vs []) a) u v)
-              vs (if has-cs? (:vs ap))
-              changed? (pos? (count vs))]
-          (if changed?
-            ((run-constraints* vs (:cs ap) ::subst) (assoc ap :vs nil))
-            ap))))))
+    (or (self-member-set-rewrite u v a)
+        (self-member-set-rewrite v u a)
+        (if (closed-set-equality? u v)
+          (unify-closed-set-terms u v a)
+          (let [has-cs? (pos? (count (:cs a)))]
+            (let [ap (unify (if has-cs? (assoc a :vs []) a) u v)
+                  vs (if has-cs? (:vs ap))
+                  changed? (pos? (count vs))]
+              (if changed?
+                ((run-constraints* vs (:cs ap) ::subst) (assoc ap :vs nil))
+                ap)))))))
 
 (defn- bind-conde-clause [a]
   (fn [g-rest]
