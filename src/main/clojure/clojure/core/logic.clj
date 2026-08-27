@@ -1517,10 +1517,17 @@ it should, as sets are seqs:"
 (defn self-member-set-rewrite
   [u v a]
   (when (and (lvar? u) (set-value? v))
-    (let [members (if (set? v) v (set-term-members v))]
+    (let [members (if (set? v) v (set-term-members v))
+          current (walk a u)]
       (when (some #(= u %) members)
-        (let [tail (lvar)
-              term (set-term tail (remove #(= u %) members))
+        (let [tail (if (set-term? current)
+                     (set-term-base current)
+                     (lvar))
+              previous (if (set-term? current)
+                         (set-term-members current)
+                         [])
+              term (set-term tail
+                             (into previous (remove #(= u %) members)))
               a (ext-no-check a u term)]
           ((seto tail) a))))))
 
