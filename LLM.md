@@ -234,6 +234,59 @@ Keep each step independently reviewable and semantically close to the paper:
    invariants are documented. Avoid a broad rewrite while semantic parity is
    still being established.
 
+## Session commit rationale
+
+The 18 commits made during this session are intentionally small and chronological.
+Their messages are being amended to preserve the reasoning that led to each
+boundary:
+
+1. **Add initial SetTerm representation:** isolate the original Scheme forms
+   that prevented compilation, then introduce a Clojure record with explicit
+   base and member fields. `llist` was rejected as the value representation
+   because it is a macro and ordinary improper lists are ambiguous.
+2. **Document CLP Set development plan:** capture the paper scope, Nada Amin
+   comparison, open questions, conservative commit plan, and testing strategy.
+3. **Integrate SetTerm with term protocols:** make walking, reification,
+   occurs-check, and building visit both the tail and members; add the missing
+   persistent-set walker that prevents recursive fallback through `Object`.
+4. **Update CLP Set progress notes:** record the executable protocol slice and
+   its green regression count.
+5. **Add bounded ground SetTerm unification:** support only fully ground
+   extensional equality, including permutation and ordinary Clojure sets;
+   deliberately reject open terms until Fig. 3 exists.
+6. **Document ground SetTerm boundary:** make that soundness boundary and its
+   tests explicit.
+7. **Clarify open-set equality roadmap:** explain that open equality cannot be
+   implemented as a deterministic `IUnifyTerms` method and needs stream goals
+   plus residual constraints.
+8. **Add relational closed-set equality:** enumerate finite member
+   correspondences lazily for closed terms with logic variables.
+9. **Document closed-set equality boundary:** record the closed/open distinction
+   and the new test result.
+10. **Support nested closed-set matching:** route nested set members through the
+  same relational matcher instead of raw deterministic unification.
+11. **Document nested set matching:** preserve the nested-case rationale in the
+  handoff.
+12. **Document Fig3 constraint boundary:** record that `cgoal` is single-state
+  propagation and cannot directly consume a branching `Choice`.
+13. **Implement first open-set rewrite:** add residual `seto` and the first
+  self-membership rewrite, `q = {q, 1}`.
+14. **Document first open-set rewrite:** record the exact reified open term and
+  residual constraint shape.
+15. **Preserve repeated open-set members:** compose repeated self-membership
+  rewrites without dropping earlier members; keep the reference multiplicity
+  discrepancy visible.
+16. **Document open-set multiplicity gap:** state that the interim result is
+  sound but does not yet reproduce the reference's five branches.
+17. **Expand narrow open-set equality:** add nested self-membership and the
+  shared-variable case `#{q 2} = #{q 1}`.
+18. **Document expanded equality coverage:** list these narrow branches and the
+  remaining general member-selection gap.
+
+The exact commit subjects may be refined during history cleanup, but each
+semantic boundary remains separate so later work can be compared with Nada's
+Scheme implementation one decision at a time.
+
 ## Stronger testing strategy
 
 Nada's examples are excellent golden tests, but they mostly assert selected
