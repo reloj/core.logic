@@ -8,7 +8,7 @@
 
   :test-paths ["src/test/clojure"]
 
-  :dependencies [[org.clojure/clojure "1.7.0" :scope "provided"]
+  :dependencies [[org.clojure/clojure "1.12.0-beta1" :scope "provided"]
                  [org.clojure/clojurescript "0.0-3308" :scope "provided"]
                  [org.clojure/tools.analyzer.jvm "0.7.2"]
                  ;[com.datomic/datomic-free "0.8.4270" :scope "provided"]

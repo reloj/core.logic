@@ -3599,7 +3599,7 @@
 
 (deftest clpset-run-eq-3
   (is (=
-         (run* [q] (fresh [x y r s] (== q [x y r s]) (== (lset r x) (lset s y))))
+         (run* [q] (fresh [x y r s] (== q [x y r s]) (== (lset r #{x}) (lset s #{y}))))
        '(((_0 _0 _1 _1) :- (seto _1))
          ((_0 _0 _1 #{_1 _0}) :- (seto _1))
          ((_0 _0 #{_1 _0} _1) :- (seto _1))

@@ -913,7 +913,7 @@
 ;; =============================================================================
 ;; LSet
 
-(declare unify-with-set* lset lset? lset-to-llist) ; to do order a little bit
+(declare unify-with-set* lset lset? lset-to-llist llist-to-lset) ; to do order a little bit
 
 (deftype LSet [base mems ^{:unsynchronized-mutable true :tag int} cache meta]
   ITreeTerm
@@ -932,7 +932,7 @@
   (valAt [this k not-found]
     (case k
       :base base
-      :mems mems
+      :mems (do (when (not (or (set? mems) (empty? mems))) (println "Non-set mems: " mems)) mems)
       not-found))
 
   Object
@@ -967,6 +967,10 @@
         cache)
       cache))
 
+  clojure.lang.Counted
+  (count [this]
+    (count (:mems this)))
+
   IUnifyTerms ; the protocols file says that this is for core Clojure types, and the next 4 interfaces for terms in general
   (unify-terms [u v s]
     (cond
@@ -978,11 +982,25 @@
 
   IReifyTerm
   (reify-term [v s]
-    (reify-term (lset-to-llist v) s))
+    (lset
+     (-reify* s (:base v))
+     (-reify* s (:mems v))))
 
+  ;; TODO: no way to make this non-stack consuming w/o a lot more thinking
+  ;; we could use continuation passing style and trampoline
   IWalkTerm
   (walk-term [v f]
-    (walk-term (lset-to-llist v) f))
+    (lset (f (:base v))
+          (f (:mems v))))
+
+  #_(walk-term [v f]
+      (llist-to-lset (walk-term (lset-to-llist v) f))) ; cleaner but less efficient, perhaps repeat code?
+
+  #_(comment
+    (walk-term [v f]
+               (let [v (lset-to-llist v)])
+               (llist-to-lset (lcons (f (lfirst v))
+                                     (f (lnext v))))))
 
   IOccursCheckTerm
   (occurs-check-term [v x s]
@@ -1031,13 +1049,15 @@
     (set? x)
     (lset (into x es))
     (lset-empty? x)
-    (if (empty? es) x (lset es)) ; es cant be an lset or this fails. I think empty? should work for LSet...
+    (if (empty? es) x (lset es)) ; es cant be an lset or this fails. I think empty? should work for LSet... but no, I could implement Iterable but if I have logic vars... well actually.... mmmh... no, because of the improper tail
     (lset? x)
-    (recur (walk s (:base x))
-           (into (:mems x) es)
-           s)
+    (if (lvar? (:mems x))
+      :error-this-was-not-allowed       ; namin did not allow it
+      (recur (walk s (:base x))
+             (into (:mems x) es)
+             s))
     (lvar? x)
-    (if (empty? es) x (lset x es))
+    (if (empty? es) x (lset x es)) ; here we lose info that the lvar x needs to be a set, probable culprit
     (and (symbol? x) (not (empty? es))) (lset x es)))
 
 (defn lset-tail [x]                     ; no claro que esté bien
@@ -1058,7 +1078,7 @@
   (first (:mems x)))
 
 (defn non-empty-lset-rest [x]
-  (let [r (rest (:mems x))]
+  (let [r (set (rest (:mems x)))]
     (if (nil? r)
       (:base x)
       (lset (:base x) r))))
@@ -3105,26 +3125,30 @@
  sets and improper tails?"
 
 (defn lset-ext [s u v]
+  "I've created this function to bridge the LVar unify-terms definition that nolen has with the unique unifier namin has.
+   perhaps we can be more elegant, not sure if this should be part of the ext function so it can also be called in other
+   places... have a think about it. u should be only an lvar, and v an lset, in my current assumption"
+ ; (println "### (lset-ext " s ", " u ", " v ")") (flush)
   (when (and (lvar? u) (lset? v))
     (let [vns (lset-normalize v #{} s)
           vtail (lset-tail vns)]
-      (if (and (= u vtail)
+      (if (and ; (= u vtail) ; uncommenting this makes this fail: (lset-ext empty-s (lvar) (lset (lvar) #{1}))
                (not (occurs-check s u (:mems vns))))
-        (bind s ; check bind is as usual
-              (let [n (lvar)]
+        (bind s                         ; check bind is as usual
+              (fresh [n]
                 (== u (with-lset-tail n vns))
                 (seto n)))))))
 
 (defn unify-with-set* [u v s]
   (let [uns (lset-normalize u #{} s) ; i moved this up for readability but it has a walk that I could postpone
         vns (lset-normalize v #{} s)]
-    (when vns   ; u is a set or lset by unify-terms definition and v can't be an lvar by unify definition
+    (when vns ; u is a set or lset by unify-terms definition and v can't be an lvar by unify definition
       (if (lset-empty? vns)
         (bind s (if (= uns vns) succeed fail)) ; this is too low level aint it?
         (let [x (lset-tail vns)]
           (cond
-            ;;(lvar? uns)
-            ;;(ext-no-check s uns vns)
+            (lvar? uns)
+            (lset-ext s uns vns) ;; originally this, but makes more sense the former: (ext-no-check s uns vns)
 
             (not (or (and (set? u) (empty? u)) ; como ya tenemos a u normalizado en uns, podríamos mirar uns y quitar aqui una linea
                      (and (lset? u) (lset-empty? u))))
@@ -3134,7 +3158,7 @@
                     tv (non-empty-lset-first vns)
                     rv (non-empty-lset-rest vns)]
                 (bind s
-                      (let [n (lvar)]
+                      (let [n (lvar)]   ; why not fresh?
                         (conde
                          [(== tu tv) (== ru rv) (seto ru)]
                          [(== tu tv) (== uns rv)]
@@ -3143,17 +3167,15 @@
                           (== rv (lset n #{tu}))
                           (seto n)]))))
               ((let [t0 (non-empty-lset-first uns) ; what is this double parens??? executing a bind? (un?)doing an inc?
-                     ru (non-empty-lset-rest uns)
-                     vbase (:base vns)
-                     vmems (:mems vns)]
+                     ru (non-empty-lset-rest uns)]
                  (let [recfn (fn recfn [j acc]
                                (if (empty? j)
                                  fail
                                  (let [tj (first j)
                                        cj (rest j)
                                        rj (if (and (empty? acc) (empty? cj))
-                                            vbase
-                                            (lset vbase (into acc cj)))]
+                                            (:base vns)
+                                            (lset (:base vns) (into acc cj)))]
                                    (let [n (lvar)]
                                      (conde
                                       [(== t0 tj) (== ru rj) (seto ru)]
@@ -3161,9 +3183,9 @@
                                       [(== t0 tj) (== ru vns)]
                                       [(== x (lset n #{t0}))
                                        (== (with-lset-tail n ru) (with-lset-tail n vns))
-                                       (seto n)()]
-                                      [(recfn cj (cons tj acc))])))))]
-                   (bind s (recfn vmems #{}))))))))))))
+                                       (seto n)]
+                                      [(recfn cj (conj acc tj))])))))]
+                   (bind s (recfn (:mems vns) #{}))))))))))))
 
 (comment
   (run* [q] (== #{} (lset #{})))
@@ -3172,19 +3194,37 @@
   (run* [q] (seto (lset #{})))
   (run* [q] (seto  #{2}))
   (run* [q] (seto (lset #{2})))
-  (run* [q](== (lset #{}) (lset (lvar) #{2})))
+  (run* [q] (seto q))
+  (run* [q] (== (lset #{}) (lset (lvar) #{2})))
   (run* [y s] (== #{1 2} #{y s}))
-
   (run* [q] (== #{q 2} #{1 q}))
   (run* [q] (== (lset q #{2}) (lset #{1} #{q})))
-  (run* [q] (== (lset q #{}) (lset #{1} #{})))
 
+  (run* [q] (== (lset q #{}) (lset #{1} #{}))) ;; to check this reification as list
+  
   (run* [q] (== q (lset q #{1})))
-  (run* [q] (== q (lset q #{1})) (== q (lset q #{2})))
-  (run* [q] (fresh [x y r s] (== q [x y r s]) (== (lset r x) (lset s y))))
-  (run* [q] (fresh [z] (== q (lset q (lset z #{1})))))
-  (run* [q] (== (lset q #{2}) (lset q #{1})))
-  )
+
+  (run* [q] (== q (lset q #{1})) (== q (lset q #{2}))) ; still wrong... but way closer!
+
+  (let [lvar0 (lvar)
+        lvar1 (lvar)
+        lvar2 (lvar)
+        lvar8 (lvar)
+        a (-> empty-s
+              (ext-no-check lvar0 (lset lvar1 #{1}))
+              (ext-no-check lvar1 (lset lvar2 #{1}))
+              (ext-no-check lvar2 (lset lvar8 #{1 2})))
+        x lvar2
+        r (ext-no-check empty-s lvar8 (lvar))]
+   (-reify a x r)) ; fails for some reason
+
+  (run* [q] (fresh [x y r s] (== q [x y r s]) (== (lset r #{x}) (lset s #{y}))))
+
+  (run* [q] (fresh [z] (== q (lset q (lset z #{1}))))) ; breaks
+
+
+
+    (run* [q] (== (lset q #{2}) (lset q #{1}))))
 
 ;(declare composeg remcg ground-term? cgoal)
 (defn -seto
@@ -3216,7 +3256,7 @@
     (-rands [_] [x]) ;; no completamente seguro de esta linea, featurec dropea un parámetro
     IReifiableConstraint
     (-reifyc [_ v r a]
-      `(seto ~x))
+      `(:seto ~(-reify a x r)))
     IConstraintWatchedStores
     (-watched-stores [_] #{::subst ::set-seto}))) ;; ni idea de lo que hace esto aun
 
